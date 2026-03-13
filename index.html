@@ -276,12 +276,18 @@
             document.getElementById('dbRecordCount').innerText = `已存衝線記錄: ${finishData.length} 筆`;
         }
 
-        // ==========================================
-        // 2. 系統控制及防熄屏 (加入 iOS 智能全螢幕提示)
+      // ==========================================
+        // 2. 系統控制及防熄屏 (強化版：支援 Android/iOS 全螢幕及不熄屏)
         // ==========================================
         async function requestWakeLock() {
             try {
-                if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); }
+                if ('wakeLock' in navigator) { 
+                    wakeLock = await navigator.wakeLock.request('screen'); 
+                } else {
+                    // 如果不支援 WakeLock (部分 Android)，嘗試播放隱形影片/音頻維持喚醒
+                    const silentAudio = document.getElementById('silentAudio');
+                    if (silentAudio) silentAudio.play().catch(e => console.log("WakeLock Audio Fail"));
+                }
             } catch (err) { console.log('WakeLock:', err.message); }
         }
 
@@ -289,60 +295,71 @@
             if (wakeLock !== null && document.visibilityState === 'visible') { await requestWakeLock(); }
         });
 
-        // 【核心更新】智能全螢幕偵測及 iOS 教學
+        // 【核心更新 v4.2】全相容全螢幕偵測
         function toggleFullScreen(e) {
             if(e) { e.preventDefault(); e.stopPropagation(); }
             
             let doc = window.document;
             let docEl = doc.documentElement;
 
-            let requestFullScreen = docEl.requestFullscreen || docEl.webkitRequestFullScreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
-            let cancelFullScreen = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+            // 支援更多瀏覽器的前綴
+            let requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.webkitRequestFullScreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            let exitFS = doc.exitFullscreen || doc.webkitExitFullscreen || doc.webkitCancelFullScreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
 
-            // 判斷是否 iOS 系統及是否已經係 PWA 獨立模式
+            // 判斷是否 iOS
             let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             let isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
 
-            if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
-                // 如果唔係全螢幕
-                if (requestFullScreen && !isIOS) {
-                    // Android 或 電腦，直接執行全螢幕
-                    requestFullScreen.call(docEl).catch(err => {
-                        showIOSGuide();
+            if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
+                // 如果目前不是全螢幕模式
+                if (requestFS && !isIOS) {
+                    // Android, Chrome, PC 直接執行
+                    // 加入導航列隱藏參數 (Android 適用)
+                    requestFS.call(docEl, { navigationUI: 'hide' }).catch(err => {
+                        console.log("Full Screen Error:", err);
+                        // 如果失敗，通常係因為未「安裝」或「加入主畫面」
+                        alert("請先將網頁「新增至主螢幕」或「安裝 App」後再使用此功能。");
                     });
-                } else {
-                    // iPhone/iPad 系統
+                } else if (isIOS) {
+                    // iPhone/iPad 處理
                     if (isStandalone) {
-                        alert("✅ 您目前已經在獨立全螢幕模式中，無需再次切換！");
+                        alert("✅ iOS 目前已在獨立 App 模式（已是全螢幕）。");
                     } else {
                         showIOSGuide();
                     }
+                } else {
+                    alert("此瀏覽器不支援全螢幕 API");
                 }
             } else {
-                // 如果已經係全螢幕，就退出
-                if (cancelFullScreen) {
-                    cancelFullScreen.call(doc);
+                // 如果已經在全螢幕，點擊則退出
+                if (exitFS) {
+                    exitFS.call(doc);
                 }
             }
         }
 
         function showIOSGuide() {
-            alert("🍎 iOS (iPhone/iPad) 用戶專屬設定：\n\n蘋果 iOS 不支援一鍵全螢幕。要獲得完美全螢幕體驗：\n\n1️⃣ 點擊 Safari 畫面底部的「分享」按鈕 (方格加向上箭嘴)\n2️⃣ 向下滑動，選擇「加入主畫面」(Add to Home Screen)\n3️⃣ 點擊右上角「加入」\n\n完成後，回到桌面點擊黑色的「WTC ITT」圖示，就會變成真正的全螢幕獨立 App！");
+            alert("🍎 iOS / Android 使用提示：\n\n由於瀏覽器安全限制，要獲得「真正全螢幕」體驗：\n\n1️⃣ 點擊瀏覽器選單 (Safari 是分享掣 / Chrome 是三粒點)\n2️⃣ 選擇「新增至主螢幕」或「安裝應用程式」\n3️⃣ 從桌面打開「WTC ITT」Icon\n\n咁樣就會永遠全螢幕，唔會見到網址列！");
         }
 
         function goBack(e) {
             if(e) { e.preventDefault(); e.stopPropagation(); }
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            
+            // 移除監聽器
             document.getElementById('tapArea').removeEventListener('pointerdown', handleFinishTap);
-
+            
+            // 重置狀態
             currentMode = ''; configLocked = false; finishModeActive = false; lastBeepSec = -1;
 
+            // 重置 UI
             document.getElementById('riderInfo').classList.add('hidden');
             document.getElementById('finishRecords').classList.add('hidden');
             document.getElementById('subDisplay').classList.remove('hidden'); 
             document.getElementById('mainDisplay').style.color = 'var(--text-color)'; 
             document.getElementById('mainDisplay').classList.remove('finish-mode');
             document.getElementById('subDisplay').classList.remove('finish-mode');
+            document.getElementById('mainDisplay').innerText = "READY";
 
             document.getElementById('mainApp').style.display = 'none';
             document.getElementById('setupScreen').style.display = 'flex';
