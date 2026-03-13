@@ -6,12 +6,12 @@
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="WTC TT">
+    <meta name="apple-mobile-web-app-title" content="WTC ITT">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23000%22/><text y=%2250%22 x=%2250%22 font-size=%2260%22 text-anchor=%22middle%22 dominant-baseline=%22central%22>⏱️</text></svg>">
     
-    <title>WTC TT Timer v4.1</title>
+    <title>WTC ITT Timer v4.0</title>
     <style>
         /* --- 全域重設及變數 --- */
         :root {
@@ -146,10 +146,8 @@
 <body>
 
     <div id="setupScreen">
-        <div style="width: 100%; max-width: 450px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h1 style="margin: 0; font-size: 24px;">WTC TT <span style="font-size: 14px; color: var(--text-grey); font-weight: normal;">v4.1</span></h1>
-            <button class="action-btn" onpointerdown="toggleFullScreen(event)" style="background: var(--btn-reset-blue); color: white; border: none;">🔲 啟動全螢幕</button>
-        </div>
+        <h1 style="margin-bottom: 5px; margin-top: 10px;">公路計時賽 (ITT)</h1>
+        <p style="color: var(--text-grey); margin-bottom: 15px;">v4.0 專業獨立版</p>
         
         <div class="global-config-panel">
             <div class="config-row">
@@ -228,6 +226,8 @@
         // ==========================================
         // 1. Local Storage 資料庫讀寫引擎
         // ==========================================
+        
+        // 頁面載入時，自動讀取記憶
         document.addEventListener('DOMContentLoaded', loadLocalData);
 
         function saveLocalData() {
@@ -265,7 +265,10 @@
         function clearLocalData() {
             if (confirm("⚠️ 警告：這將會刪除所有已儲存的發車名單及衝線記錄，無法復原！確定嗎？")) {
                 localStorage.removeItem('wtcIttDataV4');
-                finishData = []; seqNum = 1; startProfiles = {}; globalBibOrder = [];
+                finishData = [];
+                seqNum = 1;
+                startProfiles = {};
+                globalBibOrder = [];
                 document.getElementById('globalBibs').value = '';
                 updateDbStatus();
                 alert("🗑️ 記錄已全部清除！");
@@ -276,56 +279,60 @@
             document.getElementById('dbRecordCount').innerText = `已存衝線記錄: ${finishData.length} 筆`;
         }
 
-  // --- 全螢幕功能邏輯 (v4.3 穩定版) ---
-const fullscreenBtn = document.getElementById('fullscreenBtn');
-if (fullscreenBtn) {
-    // 🟢 使用最原始的 click，Android 瀏覽器對此權限最放行
-    fullscreenBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        // 判斷目前是否處於全螢幕
-        const isFullscreen = document.fullscreenElement || 
-                             document.webkitFullscreenElement || 
-                             document.mozFullScreenElement || 
-                             document.msFullscreenElement;
+        // ==========================================
+        // 2. 系統控制及防熄屏
+        // ==========================================
 
-        if (!isFullscreen) {
-            // 1. 標準 Fullscreen API (Android Chrome / 電腦)
-            if (document.documentElement.requestFullscreen) {
-                // 💡 加入 navigationUI: 'hide' 強制嘗試隱藏 Android 底部的三粒掣
-                document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(err => {
-                    console.log(`Fullscreen Error: ${err.message}`);
-                    showFallbackAlert(); 
-                });
-            } 
-            // 2. Webkit 核心 (舊版 Android / iPad Safari)
-            else if (document.documentElement.webkitRequestFullscreen) {
-                document.documentElement.webkitRequestFullscreen();
-            } 
-            // 3. iPhone 或其他不支援設備
-            else {
-                showFallbackAlert();
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) { console.log('WakeLock:', err.message); }
+        }
+
+        // 當系統切換視窗再返黎時，重新鎖定螢幕
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                await requestWakeLock();
             }
-        } else {
-            // 退出全螢幕
-            const exitFS = document.exitFullscreen || 
-                           document.webkitExitFullscreen || 
-                           document.mozCancelFullScreen || 
-                           document.msExitFullscreen;
-            if (exitFS) {
-                exitFS.call(document);
+        });
+
+        function toggleFullScreen(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    alert("⚠️ 您目前的手機瀏覽器不支援全螢幕 API。建議使用「加入主畫面」功能將其變成獨立 App！");
+                });
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
             }
         }
-    });
-}
 
-// 針對 iPhone 或不支援全螢幕的 Android 瀏覽器彈出提示
-function showFallbackAlert() {
-    alert("⚠️ 全螢幕啟動失敗\n\n原因：瀏覽器安全限制。\n\n【解決方法】：\n1. 點擊瀏覽器選單 (iPhone 撳分享掣 / Android 撳三粒點 ⋮)\n2. 選擇「加入主畫面」或「安裝應用程式」\n3. 從手機桌面開啟，即享 100% 完美全螢幕！");
-}
+        function goBack(e) {
+            if(e) { e.preventDefault(); e.stopPropagation(); }
+            if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            document.getElementById('tapArea').removeEventListener('pointerdown', handleFinishTap);
+
+            currentMode = ''; configLocked = false; finishModeActive = false; lastBeepSec = -1;
+
+            document.getElementById('riderInfo').classList.add('hidden');
+            document.getElementById('finishRecords').classList.add('hidden');
+            document.getElementById('subDisplay').classList.remove('hidden'); 
+            document.getElementById('mainDisplay').style.color = 'var(--text-color)'; 
+            document.getElementById('mainDisplay').classList.remove('finish-mode');
+            document.getElementById('subDisplay').classList.remove('finish-mode');
+
+            document.getElementById('mainApp').style.display = 'none';
+            document.getElementById('setupScreen').style.display = 'flex';
+            
+            saveLocalData(); // 返回主頁時再強制 Save 一次
+        }
+
         // ==========================================
         // 3. 核心邏輯
         // ==========================================
+
         function startApp(mode) {
             const timeStr = document.getElementById('globalFirstTime').value;
             const intSec = parseInt(document.getElementById('globalInterval').value);
@@ -352,7 +359,7 @@ function showFallbackAlert() {
                 startProfiles[bib] = st.getTime();
             });
 
-            saveLocalData(); 
+            saveLocalData(); // 設定完立即儲存
             initApp(mode, baseTime);
         }
 
@@ -383,6 +390,7 @@ function showFallbackAlert() {
                 document.getElementById('mainDisplay').classList.add('finish-mode');
                 document.getElementById('subDisplay').classList.add('finish-mode');
                 
+                // 讀取並重新渲染舊記錄
                 renderRecordsList();
                 
                 document.getElementById('tapArea').addEventListener('pointerdown', handleFinishTap);
@@ -393,7 +401,8 @@ function showFallbackAlert() {
 
         function renderRecordsList() {
             const list = document.getElementById('recordsList');
-            list.innerHTML = ''; 
+            list.innerHTML = ''; // 清空
+            // 倒序渲染，確保最新拍錶喺頂
             [...finishData].reverse().forEach(row => {
                 const item = document.createElement('div');
                 item.className = 'record-item';
@@ -479,7 +488,7 @@ function showFallbackAlert() {
             let timeString = `${h}:${m}:${s}.${ms}`;
 
             finishData.push({ seq: seqNum, time: timeString, todMs: tapTime.getTime(), bib: '', netTimeStr: '' });
-            saveLocalData(); 
+            saveLocalData(); // 拍錶即 Save！
 
             const list = document.getElementById('recordsList');
             const item = document.createElement('div');
@@ -517,7 +526,7 @@ function showFallbackAlert() {
             } else {
                 netSpan.innerText = "無起步記錄"; netSpan.style.color = "var(--text-grey)"; record.netTimeStr = "NO_START_TIME";
             }
-            saveLocalData(); 
+            saveLocalData(); // 入完車牌即刻 Save 落底！
         }
 
         function formatNetTime(ms) {
