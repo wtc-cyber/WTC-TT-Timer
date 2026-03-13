@@ -496,7 +496,7 @@
             item.innerHTML = `
                 <div class="col-seq">#${seqNum}</div>
                 <div class="col-tod">${timeString}</div>
-                <input type="number" class="col-bib" placeholder="車牌" oninput="updateRecord(${seqNum}, this.value)">
+                <input type="number" class="col-bib" placeholder="運動員號碼" oninput="updateRecord(${seqNum}, this.value)">
                 <div class="col-net" id="net-${seqNum}">--:--:--.---</div>
             `;
             list.prepend(item); 
@@ -538,7 +538,7 @@
 
         function exportCSV() {
             if (finishData.length === 0) { alert('無記錄可匯出'); return; }
-            let csvContent = "\uFEFF順序,衝線真實時間(TOD),車牌,淨時間(Net Time)\n";
+            let csvContent = "\uFEFF順序,衝線真實時間(TOD),運動員號碼,淨時間(Net Time)\n";
             finishData.forEach(row => { csvContent += `${row.seq},${row.time},${row.bib || ''},${row.netTimeStr || ''}\n`; });
             
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
