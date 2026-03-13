@@ -6,12 +6,13 @@
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="WTC ITT">
+    <meta name="apple-mobile-web-app-title" content="WTC TT">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23000%22/><text y=%2250%22 x=%2250%22 font-size=%2260%22 text-anchor=%22middle%22 dominant-baseline=%22central%22>⏱️</text></svg>">
     
-    <title>WTC ITT Timer v4.0</title>
+    <title>WTC TT Timer v5.0</title>
+
     <style>
         /* --- 全域重設及變數 --- */
         :root {
@@ -34,7 +35,7 @@
             overflow: hidden; display: flex; flex-direction: column;
         }
 
-        /* --- 模式選擇畫面 --- */
+        /* --- 模式選擇畫面 (設定頁) --- */
         #setupScreen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background-color: var(--bg-color); z-index: 100;
@@ -58,7 +59,7 @@
             padding: 10px; font-size: 16px; border-radius: 8px; resize: none; user-select: text; -webkit-user-select: text;
         }
 
-        /* 資料庫狀態區 */
+        /* --- 資料庫狀態區 --- */
         .db-status-panel {
             background: rgba(41, 121, 255, 0.15); border: 1px solid var(--btn-reset-blue);
             border-radius: 10px; padding: 15px; width: 100%; max-width: 450px;
@@ -77,7 +78,7 @@
         .mode-start { background-color: var(--status-green); border: 2px solid var(--btn-start-green); }
         .mode-finish { background-color: var(--status-red); border: 2px solid var(--btn-finish-red); }
 
-        /* --- 主畫面共用 --- */
+        /* --- 主畫面 (計時器/紀錄) 共用 --- */
         #mainApp { display: none; flex-direction: column; height: 100%; width: 100%; }
 
         .top-bar {
@@ -146,8 +147,8 @@
 <body>
 
     <div id="setupScreen">
-        <h1 style="margin-bottom: 5px; margin-top: 10px;">公路計時賽 (ITT)</h1>
-        <p style="color: var(--text-grey); margin-bottom: 15px;">v4.0 專業獨立版</p>
+        <h1 style="margin-bottom: 5px; margin-top: 10px;">公路計時賽 (TT)</h1>
+        <p style="color: var(--text-grey); margin-bottom: 15px;">v5.0 </p>
         
         <div class="global-config-panel">
             <div class="config-row">
@@ -196,15 +197,16 @@
 
         <div id="finishRecords" class="records-area hidden">
             <div class="records-header">
-                <span style="font-size: 14px; color: var(--text-grey);">名次 | 衝線時間(TOD) | 車牌 | 淨時間(Net)</span>
+                <span style="font-size: 14px; color: var(--text-grey);">名次 | 衝線時間(TOD) | 運動員號碼 | 淨時間(Net)</span>
             </div>
             <div id="recordsList" class="records-list">
                 </div>
         </div>
     </div>
 
+
     <script>
-        // --- 全域變數 ---
+        // --- 變數宣告區 ---
         let currentMode = '';
         let audioCtx;
         let animationFrameId;
@@ -223,11 +225,7 @@
         let startProfiles = {};    
         let finishModeActive = false;
 
-        // ==========================================
-        // 1. Local Storage 資料庫讀寫引擎
-        // ==========================================
-        
-        // 頁面載入時，自動讀取記憶
+        // --- 模組 1: Local Storage 資料庫讀寫 ---
         document.addEventListener('DOMContentLoaded', loadLocalData);
 
         function saveLocalData() {
@@ -279,10 +277,7 @@
             document.getElementById('dbRecordCount').innerText = `已存衝線記錄: ${finishData.length} 筆`;
         }
 
-        // ==========================================
-        // 2. 系統控制及防熄屏
-        // ==========================================
-
+        // --- 模組 2: 系統控制 (螢幕喚醒、全螢幕、導覽) ---
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
@@ -291,7 +286,6 @@
             } catch (err) { console.log('WakeLock:', err.message); }
         }
 
-        // 當系統切換視窗再返黎時，重新鎖定螢幕
         document.addEventListener('visibilitychange', async () => {
             if (wakeLock !== null && document.visibilityState === 'visible') {
                 await requestWakeLock();
@@ -326,13 +320,10 @@
             document.getElementById('mainApp').style.display = 'none';
             document.getElementById('setupScreen').style.display = 'flex';
             
-            saveLocalData(); // 返回主頁時再強制 Save 一次
+            saveLocalData(); 
         }
 
-// ==========================================
-        // 3. 核心邏輯 (整合「黎緊出發名單」功能)
-        // ==========================================
-
+        // --- 模組 3: 核心計時與名單邏輯 ---
         function startApp(mode) {
             const timeStr = document.getElementById('globalFirstTime').value;
             const intSec = parseInt(document.getElementById('globalInterval').value);
@@ -349,17 +340,40 @@
                 baseTime.setDate(baseTime.getDate() + 1);
             }
 
-            intervalMs = intSec * 1000;
+intervalMs = intSec * 1000;
             const bibs = bibsStr.split(/[\s,]+/).filter(b => b.trim() !== '');
             globalBibOrder = bibs; 
-            startProfiles = {};
             
+            if (!startProfiles) startProfiles = {};
+            let currentTime = new Date().getTime();
+            let bibCounters = {}; // 追蹤每個號碼目前排到第幾次發車
+
+            // 重新分配發車時間
             bibs.forEach((bib, index) => {
                 let st = new Date(baseTime.getTime() + index * intervalMs);
-                startProfiles[bib] = st.getTime();
+                let stTime = st.getTime();
+                
+                // 確保這個號碼的記錄是個「陣列」(支援跑多趟)
+                if (!startProfiles[bib]) startProfiles[bib] = [];
+                // 兼容舊資料，如果舊資料只有一個時間數字，把它包成陣列
+                if (!Array.isArray(startProfiles[bib])) startProfiles[bib] = [startProfiles[bib]];
+
+                if (!bibCounters[bib]) bibCounters[bib] = 0;
+                let runIdx = bibCounters[bib];
+
+                // A. 如果是全新加的趟次，直接加進記錄
+                if (startProfiles[bib].length <= runIdx) {
+                    startProfiles[bib].push(stTime);
+                } 
+                // B. 如果這趟的發車時間還沒到 (在未來)，允許更新時間
+                else if (startProfiles[bib][runIdx] > currentTime) {
+                    startProfiles[bib][runIdx] = stTime;
+                }
+                
+                bibCounters[bib]++;
             });
 
-            saveLocalData(); // 設定完立即儲存
+            saveLocalData(); 
             initApp(mode, baseTime);
         }
 
@@ -407,13 +421,14 @@
                 item.innerHTML = `
                     <div class="col-seq">#${row.seq}</div>
                     <div class="col-tod">${row.time}</div>
-                    <input type="number" class="col-bib" placeholder="車牌" value="${row.bib || ''}" oninput="updateRecord(${row.seq}, this.value)">
+                    <input type="number" class="col-bib" placeholder="號碼" value="${row.bib || ''}" oninput="updateRecord(${row.seq}, this.value)">
                     <div class="col-net" id="net-${row.seq}" style="color: ${netColor}">${row.netTimeStr || '--:--:--.---'}</div>
                 `;
                 list.appendChild(item);
             });
         }
 
+        // --- 模組 4: 音效系統 ---
         function playBeep(freq, type, durationMs, vol = 1) {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
@@ -431,6 +446,7 @@
             osc.start(startTime); osc.stop(startTime + durationSec);
         }
 
+        // --- 模組 5: UI 更新迴圈 ---
         function systemLoop() {
             const now = new Date();
             document.getElementById('systemClock').innerText = now.toLocaleTimeString('en-GB');
@@ -458,11 +474,9 @@
                 setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 500);
             }
 
-            // 大字倒數顯示
             let secLeft = Math.ceil(diffMs / 1000);
             document.getElementById('mainDisplay').innerText = secLeft;
 
-            // --- 黎緊出發名單渲染邏輯 (顯示 5 位) ---
             let listHTML = "";
             let showNum = 5; 
             for (let i = 0; i < showNum; i++) {
@@ -473,17 +487,14 @@
                     let riderName = getNextRiderDisplay(idx);
                     
                     if (i === 0) {
-                        // 第一位最醒目
                         listHTML += `<div style="color: #00ff00; font-weight: bold; font-size: 1.2em; margin-bottom: 5px;">NEXT: ${timeStr} - ${riderName}</div>`;
                     } else {
-                        // 後續位稍微淡色
                         listHTML += `<div style="color: #bbb; font-size: 0.9em;">${timeStr} - ${riderName}</div>`;
                     }
                 }
             }
             document.getElementById('riderInfo').innerHTML = listHTML || "名單已結束";
 
-            // 倒數音效
             if (secLeft !== lastBeepSec) {
                 if (secLeft === 30 || secLeft === 10 || (secLeft <= 5 && secLeft > 0)) playBeep(490, 'square', 400); 
                 lastBeepSec = secLeft;
@@ -497,6 +508,7 @@
             document.getElementById('mainDisplay').innerText = `${h}:${m}:${s}`; document.getElementById('subDisplay').innerText = `.${ms}`;
         }
 
+        // --- 模組 6: 衝線與匯出邏輯 ---
         function handleFinishTap(e) {
             if(!finishModeActive) return;
             e.preventDefault(); 
@@ -525,7 +537,7 @@
             setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 100);
         }
 
-        function updateRecord(seq, bibValue) {
+function updateRecord(seq, bibValue) {
             const record = finishData.find(r => r.seq === seq);
             if (!record) return;
             const bib = bibValue.trim();
@@ -535,12 +547,24 @@
             if (bib === "") {
                 netSpan.innerText = "--:--:--.---"; netSpan.style.color = "var(--text-grey)"; record.netTimeStr = ""; 
             } else if (startProfiles[bib]) {
-                const netMs = record.todMs - startProfiles[bib];
-                if (netMs < 0) {
-                    netSpan.innerText = "時間錯"; netSpan.style.color = "var(--status-red)"; record.netTimeStr = "ERROR";
+                // 找出該號碼【所有】小於或等於衝線時間的起步記錄 (過濾掉還沒發車的未來班次)
+                let validStarts = [];
+                if (Array.isArray(startProfiles[bib])) {
+                    validStarts = startProfiles[bib].filter(t => t <= record.todMs);
                 } else {
+                    if (startProfiles[bib] <= record.todMs) validStarts.push(startProfiles[bib]);
+                }
+
+                if (validStarts.length > 0) {
+                    // 如果他跑了多次，取最接近衝線前的那一次發車時間來計算
+                    let bestStart = validStarts[validStarts.length - 1];
+                    const netMs = record.todMs - bestStart;
+                    
                     const formatted = formatNetTime(netMs);
                     netSpan.innerText = formatted; netSpan.style.color = "var(--btn-start-green)"; record.netTimeStr = formatted;
+                } else {
+                    // 記錄裡有他，但他的所有起步時間都在未來
+                    netSpan.innerText = "尚未發車"; netSpan.style.color = "var(--status-red)"; record.netTimeStr = "ERROR";
                 }
             } else {
                 netSpan.innerText = "無起步記錄"; netSpan.style.color = "var(--text-grey)"; record.netTimeStr = "NO_START_TIME";
