@@ -276,17 +276,21 @@
             document.getElementById('dbRecordCount').innerText = `已存衝線記錄: ${finishData.length} 筆`;
         }
 
-   // ==========================================
-        // 2. 系統控制及防熄屏 (Android 強制全螢幕修正版)
+  // ==========================================
+        // 2. 系統控制及防熄屏 (Android/iOS 終極兼容版)
         // ==========================================
         async function requestWakeLock() {
             try {
+                // 1. 嘗試 WakeLock API
                 if ('wakeLock' in navigator) { 
                     wakeLock = await navigator.wakeLock.request('screen'); 
                 }
-                // 啟動隱藏音頻防止熄屏
+                // 2. 啟動隱藏音頻 (防止 Android/iOS 鎖屏的暴力手段)
                 const silentAudio = document.getElementById('silentAudio');
-                if (silentAudio) silentAudio.play().catch(e => {});
+                if (silentAudio) {
+                    silentAudio.muted = false; // 必須要唔係 muted 先有用
+                    silentAudio.play().catch(e => console.log("Audio WakeLock active after interaction"));
+                }
             } catch (err) { console.log('WakeLock:', err.message); }
         }
 
@@ -294,76 +298,67 @@
             if (wakeLock !== null && document.visibilityState === 'visible') { await requestWakeLock(); }
         });
 
+        // 核心全螢幕控制
         function toggleFullScreen(e) {
             if(e) { e.preventDefault(); e.stopPropagation(); }
             
             const doc = window.document;
             const docEl = doc.documentElement;
 
-            // 判斷是否 iOS
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-            const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+            // 檢查係咪已經全螢幕
+            const isFull = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
 
-            // 如果已經係全螢幕，就退出
-            if (doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement) {
+            if (!isFull) {
+                // 定義所有可能嘅 request 方法
+                const requestFS = docEl.requestFullscreen || 
+                                docEl.webkitRequestFullscreen || 
+                                docEl.webkitRequestFullScreen || 
+                                docEl.mozRequestFullScreen || 
+                                docEl.msRequestFullscreen;
+
+                if (requestFS) {
+                    // Android / Chrome / PC
+                    // 用 try catch 包住，因為有啲 Android 瀏覽器會 reject 呢個動作
+                    try {
+                        const p = requestFS.call(docEl, { navigationUI: 'hide' });
+                        if (p !== undefined) {
+                            p.catch(err => {
+                                alert("Android 提示：請點擊 Chrome 右上角「⋮」並選擇「安裝應用程式」或「新增至主螢幕」，從桌面開啟即可獲得真正全螢幕。");
+                            });
+                        }
+                    } catch (err) {
+                        alert("請將網頁「新增至主螢幕」後開啟。");
+                    }
+                } else {
+                    // iOS 或不支援嘅瀏覽器
+                    showIOSGuide();
+                }
+            } else {
+                // 退出全螢幕
                 const exitFS = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
                 if (exitFS) exitFS.call(doc);
-                return;
-            }
-
-            // 嘗試啟動全螢幕
-            try {
-                const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.webkitRequestFullScreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
-                
-                if (requestFS && !isIOS) {
-                    // Android 強制指令
-                    const promise = requestFS.call(docEl, { navigationUI: 'hide' });
-                    if (promise !== undefined) {
-                        promise.catch(err => {
-                            console.error(err);
-                            showManualGuide("Android");
-                        });
-                    }
-                } else if (isIOS && !isStandalone) {
-                    showManualGuide("iOS");
-                } else if (isStandalone) {
-                    alert("✅ 已經係全螢幕 App 模式");
-                } else {
-                    showManualGuide("Common");
-                }
-            } catch (err) {
-                showManualGuide("Common");
             }
         }
 
-        function showManualGuide(type) {
-            let msg = "";
-            if (type === "Android") {
-                msg = "🤖 Android 全螢幕失敗原因：\nChrome 限制咗普通網頁全螢幕。\n\n【解決方法】：\n1. 點擊 Chrome 右上角「三個點 ⋮」\n2. 搵「安裝應用程式」或「新增至主螢幕」\n3. 喺桌面打開個 App，就會自動變全螢幕！";
-            } else if (type === "iOS") {
-                msg = "🍎 iOS 限制：\nApple 唔俾網頁一鍵全螢幕。\n\n【解決方法】：\n1. 點擊 Safari 下方「分享掣」\n2. 揀「加入主畫面」\n3. 去桌面打開個 App 即可！";
-            } else {
-                msg = "請將網頁「新增至主螢幕」後再打開，以獲得全螢幕體驗。";
-            }
-            alert(msg);
+        function showIOSGuide() {
+            alert("🍎 iOS / Android 設置教學：\n\n1. 點擊瀏覽器選單 (Safari 分享掣 / Chrome 三粒點 ⋮)\n2. 選擇「加入主畫面」或「安裝應用程式」\n3. 喺手機桌面打開「WTC ITT」App\n\n咁樣做就唔使㩒掣，自動全螢幕！");
         }
 
         function goBack(e) {
             if(e) { e.preventDefault(); e.stopPropagation(); }
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
             
-            // 停用所有監聽
-            document.getElementById('tapArea').onclick = null;
+            // 回到首頁重置狀態
+            currentMode = ''; 
             finishModeActive = false;
 
             document.getElementById('mainApp').style.display = 'none';
             document.getElementById('setupScreen').style.display = 'flex';
             
-            // 重置 UI 狀態
-            document.getElementById('riderInfo').classList.add('hidden');
-            document.getElementById('finishRecords').classList.add('hidden');
-            document.getElementById('mainDisplay').classList.remove('finish-mode');
+            // 確保 UI 變返 READY
             document.getElementById('mainDisplay').innerText = "READY";
+            document.getElementById('mainDisplay').classList.remove('finish-mode');
+            document.getElementById('subDisplay').classList.remove('finish-mode');
             
             saveLocalData(); 
         }
