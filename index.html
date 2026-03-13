@@ -440,45 +440,34 @@ function showFallbackAlert() {
             return `車手 #${idx + 1}`;
         }
 
-function updateStartMode(now) {
-    let diffMs = nextTargetTime.getTime() - now.getTime();
+        function updateStartMode(now) {
+            let diffMs = nextTargetTime.getTime() - now.getTime();
 
-    if (diffMs <= 0) {
-        playBeep(990, 'square', 800); 
-        lastBeepSec = -1; 
-        currentStartIdx++;
-        nextTargetTime.setTime(nextTargetTime.getTime() + intervalMs);
-        diffMs = nextTargetTime.getTime() - now.getTime();
-        document.getElementById('tapArea').style.backgroundColor = 'var(--status-green)';
-        setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 500);
-    }
+            if (diffMs <= 0) {
+                playBeep(990, 'square', 800); 
+                lastBeepSec = -1; currentStartIdx++;
+                nextTargetTime.setTime(nextTargetTime.getTime() + intervalMs);
+                diffMs = nextTargetTime.getTime() - now.getTime();
+                document.getElementById('tapArea').style.backgroundColor = 'var(--status-green)';
+                setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 500);
+            }
 
-    let secLeft = Math.ceil(diffMs / 1000);
-    document.getElementById('mainDisplay').innerText = secLeft;
+            let secLeft = Math.ceil(diffMs / 1000);
+            document.getElementById('mainDisplay').innerText = secLeft;
+            document.getElementById('riderInfo').innerText = `下一位: ${getNextRiderDisplay(currentStartIdx)} @ ${nextTargetTime.toLocaleTimeString('en-GB')}`;
 
-    // --- 修改部分：生成接下來 5 位的資訊 ---
-    let nextFiveRiders = [];
-    for (let i = 0; i < 5; i++) {
-        let idx = currentStartIdx + i;
-        // 計算該位選手的出發時間
-        let offsetMs = i * intervalMs;
-        let riderTime = new Date(nextTargetTime.getTime() + offsetMs);
-        let timeStr = riderTime.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        
-        // 格式化每一行：[序號] 姓名 @ 時間
-        nextFiveRiders.push(`${i === 0 ? '👉' : '  '} ${getNextRiderDisplay(idx)} @ ${timeStr}`);
-    }
+            if (secLeft !== lastBeepSec) {
+                if (secLeft === 30 || secLeft === 10 || (secLeft <= 5 && secLeft > 0)) playBeep(490, 'square', 400); 
+                lastBeepSec = secLeft;
+            }
+            document.getElementById('mainDisplay').style.color = secLeft <= 10 ? 'var(--btn-finish-red)' : 'var(--text-color)';
+        }
 
-    // 將 5 位選手用換行符號連接，放入 riderInfo
-    document.getElementById('riderInfo').innerText = nextFiveRiders.join('\n');
-    // ------------------------------------
-
-    if (secLeft !== lastBeepSec) {
-        if (secLeft === 30 || secLeft === 10 || (secLeft <= 5 && secLeft > 0)) playBeep(490, 'square', 400); 
-        lastBeepSec = secLeft;
-    }
-    document.getElementById('mainDisplay').style.color = secLeft <= 10 ? 'var(--btn-finish-red)' : 'var(--text-color)';
-}
+        function updateFinishMode(now) {
+            let h = String(now.getHours()).padStart(2, '0'); let m = String(now.getMinutes()).padStart(2, '0');
+            let s = String(now.getSeconds()).padStart(2, '0'); let ms = String(now.getMilliseconds()).padStart(3, '0');
+            document.getElementById('mainDisplay').innerText = `${h}:${m}:${s}`; document.getElementById('subDisplay').innerText = `.${ms}`;
+        }
 
         function handleFinishTap(e) {
             if(!finishModeActive) return;
