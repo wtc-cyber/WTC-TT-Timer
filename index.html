@@ -329,8 +329,8 @@
             saveLocalData(); // 返回主頁時再強制 Save 一次
         }
 
-        // ==========================================
-        // 3. 核心邏輯
+// ==========================================
+        // 3. 核心邏輯 (整合「黎緊出發名單」功能)
         // ==========================================
 
         function startApp(mode) {
@@ -390,9 +390,7 @@
                 document.getElementById('mainDisplay').classList.add('finish-mode');
                 document.getElementById('subDisplay').classList.add('finish-mode');
                 
-                // 讀取並重新渲染舊記錄
                 renderRecordsList();
-                
                 document.getElementById('tapArea').addEventListener('pointerdown', handleFinishTap);
                 finishModeActive = true;
             }
@@ -401,8 +399,7 @@
 
         function renderRecordsList() {
             const list = document.getElementById('recordsList');
-            list.innerHTML = ''; // 清空
-            // 倒序渲染，確保最新拍錶喺頂
+            list.innerHTML = ''; 
             [...finishData].reverse().forEach(row => {
                 const item = document.createElement('div');
                 item.className = 'record-item';
@@ -444,9 +441,9 @@
 
         function getNextRiderDisplay(idx) {
             if (globalBibOrder.length > 0) {
-                return idx < globalBibOrder.length ? `車牌 #${globalBibOrder[idx]}` : `車牌 #(附加 ${idx + 1})`;
+                return idx < globalBibOrder.length ? `#${globalBibOrder[idx]}` : `#(附加 ${idx + 1})`;
             }
-            return `車手 #${idx + 1}`;
+            return `#${idx + 1}`;
         }
 
         function updateStartMode(now) {
@@ -461,15 +458,37 @@
                 setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 500);
             }
 
+            // 大字倒數顯示
             let secLeft = Math.ceil(diffMs / 1000);
             document.getElementById('mainDisplay').innerText = secLeft;
-            document.getElementById('riderInfo').innerText = `下一位: ${getNextRiderDisplay(currentStartIdx)} @ ${nextTargetTime.toLocaleTimeString('en-GB')}`;
 
+            // --- 黎緊出發名單渲染邏輯 (顯示 5 位) ---
+            let listHTML = "";
+            let showNum = 5; 
+            for (let i = 0; i < showNum; i++) {
+                let idx = currentStartIdx + i;
+                if (idx < globalBibOrder.length || globalBibOrder.length === 0) {
+                    let riderTime = new Date(nextTargetTime.getTime() + (i * intervalMs));
+                    let timeStr = riderTime.toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                    let riderName = getNextRiderDisplay(idx);
+                    
+                    if (i === 0) {
+                        // 第一位最醒目
+                        listHTML += `<div style="color: #00ff00; font-weight: bold; font-size: 1.2em; margin-bottom: 5px;">NEXT: ${timeStr} - ${riderName}</div>`;
+                    } else {
+                        // 後續位稍微淡色
+                        listHTML += `<div style="color: #bbb; font-size: 0.9em;">${timeStr} - ${riderName}</div>`;
+                    }
+                }
+            }
+            document.getElementById('riderInfo').innerHTML = listHTML || "名單已結束";
+
+            // 倒數音效
             if (secLeft !== lastBeepSec) {
                 if (secLeft === 30 || secLeft === 10 || (secLeft <= 5 && secLeft > 0)) playBeep(490, 'square', 400); 
                 lastBeepSec = secLeft;
             }
-            document.getElementById('mainDisplay').style.color = secLeft <= 10 ? 'var(--btn-finish-red)' : 'var(--text-color)';
+            document.getElementById('mainDisplay').style.color = secLeft <= 10 ? 'var(--status-red)' : 'var(--text-color)';
         }
 
         function updateFinishMode(now) {
@@ -488,7 +507,7 @@
             let timeString = `${h}:${m}:${s}.${ms}`;
 
             finishData.push({ seq: seqNum, time: timeString, todMs: tapTime.getTime(), bib: '', netTimeStr: '' });
-            saveLocalData(); // 拍錶即 Save！
+            saveLocalData();
 
             const list = document.getElementById('recordsList');
             const item = document.createElement('div');
@@ -496,7 +515,7 @@
             item.innerHTML = `
                 <div class="col-seq">#${seqNum}</div>
                 <div class="col-tod">${timeString}</div>
-                <input type="number" class="col-bib" placeholder="運動員號碼" oninput="updateRecord(${seqNum}, this.value)">
+                <input type="number" class="col-bib" placeholder="車牌" oninput="updateRecord(${seqNum}, this.value)">
                 <div class="col-net" id="net-${seqNum}">--:--:--.---</div>
             `;
             list.prepend(item); 
@@ -526,7 +545,7 @@
             } else {
                 netSpan.innerText = "無起步記錄"; netSpan.style.color = "var(--text-grey)"; record.netTimeStr = "NO_START_TIME";
             }
-            saveLocalData(); // 入完車牌即刻 Save 落底！
+            saveLocalData();
         }
 
         function formatNetTime(ms) {
