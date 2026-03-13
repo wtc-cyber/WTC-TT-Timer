@@ -276,92 +276,53 @@
             document.getElementById('dbRecordCount').innerText = `已存衝線記錄: ${finishData.length} 筆`;
         }
 
-  // ==========================================
-        // 2. 系統控制及防熄屏 (Android/iOS 終極兼容版)
-        // ==========================================
-        async function requestWakeLock() {
-            try {
-                // 1. 嘗試 WakeLock API
-                if ('wakeLock' in navigator) { 
-                    wakeLock = await navigator.wakeLock.request('screen'); 
-                }
-                // 2. 啟動隱藏音頻 (防止 Android/iOS 鎖屏的暴力手段)
-                const silentAudio = document.getElementById('silentAudio');
-                if (silentAudio) {
-                    silentAudio.muted = false; // 必須要唔係 muted 先有用
-                    silentAudio.play().catch(e => console.log("Audio WakeLock active after interaction"));
-                }
-            } catch (err) { console.log('WakeLock:', err.message); }
-        }
+  // --- 全螢幕功能邏輯 (v4.3 穩定版) ---
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+if (fullscreenBtn) {
+    // 🟢 使用最原始的 click，Android 瀏覽器對此權限最放行
+    fullscreenBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        // 判斷目前是否處於全螢幕
+        const isFullscreen = document.fullscreenElement || 
+                             document.webkitFullscreenElement || 
+                             document.mozFullScreenElement || 
+                             document.msFullscreenElement;
 
-        document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible') { await requestWakeLock(); }
-        });
-
-        // 核心全螢幕控制
-        function toggleFullScreen(e) {
-            if(e) { e.preventDefault(); e.stopPropagation(); }
-            
-            const doc = window.document;
-            const docEl = doc.documentElement;
-
-            // 檢查係咪已經全螢幕
-            const isFull = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
-
-            if (!isFull) {
-                // 定義所有可能嘅 request 方法
-                const requestFS = docEl.requestFullscreen || 
-                                docEl.webkitRequestFullscreen || 
-                                docEl.webkitRequestFullScreen || 
-                                docEl.mozRequestFullScreen || 
-                                docEl.msRequestFullscreen;
-
-                if (requestFS) {
-                    // Android / Chrome / PC
-                    // 用 try catch 包住，因為有啲 Android 瀏覽器會 reject 呢個動作
-                    try {
-                        const p = requestFS.call(docEl, { navigationUI: 'hide' });
-                        if (p !== undefined) {
-                            p.catch(err => {
-                                alert("Android 提示：請點擊 Chrome 右上角「⋮」並選擇「安裝應用程式」或「新增至主螢幕」，從桌面開啟即可獲得真正全螢幕。");
-                            });
-                        }
-                    } catch (err) {
-                        alert("請將網頁「新增至主螢幕」後開啟。");
-                    }
-                } else {
-                    // iOS 或不支援嘅瀏覽器
-                    showIOSGuide();
-                }
-            } else {
-                // 退出全螢幕
-                const exitFS = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
-                if (exitFS) exitFS.call(doc);
+        if (!isFullscreen) {
+            // 1. 標準 Fullscreen API (Android Chrome / 電腦)
+            if (document.documentElement.requestFullscreen) {
+                // 💡 加入 navigationUI: 'hide' 強制嘗試隱藏 Android 底部的三粒掣
+                document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(err => {
+                    console.log(`Fullscreen Error: ${err.message}`);
+                    showFallbackAlert(); 
+                });
+            } 
+            // 2. Webkit 核心 (舊版 Android / iPad Safari)
+            else if (document.documentElement.webkitRequestFullscreen) {
+                document.documentElement.webkitRequestFullscreen();
+            } 
+            // 3. iPhone 或其他不支援設備
+            else {
+                showFallbackAlert();
+            }
+        } else {
+            // 退出全螢幕
+            const exitFS = document.exitFullscreen || 
+                           document.webkitExitFullscreen || 
+                           document.mozCancelFullScreen || 
+                           document.msExitFullscreen;
+            if (exitFS) {
+                exitFS.call(document);
             }
         }
+    });
+}
 
-        function showIOSGuide() {
-            alert("🍎 iOS / Android 設置教學：\n\n1. 點擊瀏覽器選單 (Safari 分享掣 / Chrome 三粒點 ⋮)\n2. 選擇「加入主畫面」或「安裝應用程式」\n3. 喺手機桌面打開「WTC ITT」App\n\n咁樣做就唔使㩒掣，自動全螢幕！");
-        }
-
-        function goBack(e) {
-            if(e) { e.preventDefault(); e.stopPropagation(); }
-            if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
-            
-            // 回到首頁重置狀態
-            currentMode = ''; 
-            finishModeActive = false;
-
-            document.getElementById('mainApp').style.display = 'none';
-            document.getElementById('setupScreen').style.display = 'flex';
-            
-            // 確保 UI 變返 READY
-            document.getElementById('mainDisplay').innerText = "READY";
-            document.getElementById('mainDisplay').classList.remove('finish-mode');
-            document.getElementById('subDisplay').classList.remove('finish-mode');
-            
-            saveLocalData(); 
-        }
+// 針對 iPhone 或不支援全螢幕的 Android 瀏覽器彈出提示
+function showFallbackAlert() {
+    alert("⚠️ 全螢幕啟動失敗\n\n原因：瀏覽器安全限制。\n\n【解決方法】：\n1. 點擊瀏覽器選單 (iPhone 撳分享掣 / Android 撳三粒點 ⋮)\n2. 選擇「加入主畫面」或「安裝應用程式」\n3. 從手機桌面開啟，即享 100% 完美全螢幕！");
+}
         // ==========================================
         // 3. 核心邏輯
         // ==========================================
@@ -479,34 +440,45 @@
             return `車手 #${idx + 1}`;
         }
 
-        function updateStartMode(now) {
-            let diffMs = nextTargetTime.getTime() - now.getTime();
+function updateStartMode(now) {
+    let diffMs = nextTargetTime.getTime() - now.getTime();
 
-            if (diffMs <= 0) {
-                playBeep(990, 'square', 800); 
-                lastBeepSec = -1; currentStartIdx++;
-                nextTargetTime.setTime(nextTargetTime.getTime() + intervalMs);
-                diffMs = nextTargetTime.getTime() - now.getTime();
-                document.getElementById('tapArea').style.backgroundColor = 'var(--status-green)';
-                setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 500);
-            }
+    if (diffMs <= 0) {
+        playBeep(990, 'square', 800); 
+        lastBeepSec = -1; 
+        currentStartIdx++;
+        nextTargetTime.setTime(nextTargetTime.getTime() + intervalMs);
+        diffMs = nextTargetTime.getTime() - now.getTime();
+        document.getElementById('tapArea').style.backgroundColor = 'var(--status-green)';
+        setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 500);
+    }
 
-            let secLeft = Math.ceil(diffMs / 1000);
-            document.getElementById('mainDisplay').innerText = secLeft;
-            document.getElementById('riderInfo').innerText = `下一位: ${getNextRiderDisplay(currentStartIdx)} @ ${nextTargetTime.toLocaleTimeString('en-GB')}`;
+    let secLeft = Math.ceil(diffMs / 1000);
+    document.getElementById('mainDisplay').innerText = secLeft;
 
-            if (secLeft !== lastBeepSec) {
-                if (secLeft === 30 || secLeft === 10 || (secLeft <= 5 && secLeft > 0)) playBeep(490, 'square', 400); 
-                lastBeepSec = secLeft;
-            }
-            document.getElementById('mainDisplay').style.color = secLeft <= 10 ? 'var(--btn-finish-red)' : 'var(--text-color)';
-        }
+    // --- 修改部分：生成接下來 5 位的資訊 ---
+    let nextFiveRiders = [];
+    for (let i = 0; i < 5; i++) {
+        let idx = currentStartIdx + i;
+        // 計算該位選手的出發時間
+        let offsetMs = i * intervalMs;
+        let riderTime = new Date(nextTargetTime.getTime() + offsetMs);
+        let timeStr = riderTime.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        // 格式化每一行：[序號] 姓名 @ 時間
+        nextFiveRiders.push(`${i === 0 ? '👉' : '  '} ${getNextRiderDisplay(idx)} @ ${timeStr}`);
+    }
 
-        function updateFinishMode(now) {
-            let h = String(now.getHours()).padStart(2, '0'); let m = String(now.getMinutes()).padStart(2, '0');
-            let s = String(now.getSeconds()).padStart(2, '0'); let ms = String(now.getMilliseconds()).padStart(3, '0');
-            document.getElementById('mainDisplay').innerText = `${h}:${m}:${s}`; document.getElementById('subDisplay').innerText = `.${ms}`;
-        }
+    // 將 5 位選手用換行符號連接，放入 riderInfo
+    document.getElementById('riderInfo').innerText = nextFiveRiders.join('\n');
+    // ------------------------------------
+
+    if (secLeft !== lastBeepSec) {
+        if (secLeft === 30 || secLeft === 10 || (secLeft <= 5 && secLeft > 0)) playBeep(490, 'square', 400); 
+        lastBeepSec = secLeft;
+    }
+    document.getElementById('mainDisplay').style.color = secLeft <= 10 ? 'var(--btn-finish-red)' : 'var(--text-color)';
+}
 
         function handleFinishTap(e) {
             if(!finishModeActive) return;
