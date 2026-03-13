@@ -6,12 +6,12 @@
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="WTC ITT">
+    <meta name="apple-mobile-web-app-title" content="WTC TT">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23000%22/><text y=%2250%22 x=%2250%22 font-size=%2260%22 text-anchor=%22middle%22 dominant-baseline=%22central%22>⏱️</text></svg>">
     
-    <title>WTC TT Timer v4.0</title>
+    <title>WTC TT Timer v4.1</title>
     <style>
         /* --- 全域重設及變數 --- */
         :root {
@@ -146,8 +146,10 @@
 <body>
 
     <div id="setupScreen">
-        <h1 style="margin-bottom: 5px; margin-top: 10px;">公路計時賽 (TT)</h1>
-        <p style="color: var(--text-grey); margin-bottom: 15px;">v4.0 專業獨立版</p>
+        <div style="width: 100%; max-width: 450px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h1 style="margin: 0; font-size: 24px;">WTC TT <span style="font-size: 14px; color: var(--text-grey); font-weight: normal;">v4.1</span></h1>
+            <button class="action-btn" onpointerdown="toggleFullScreen(event)" style="background: var(--btn-reset-blue); color: white; border: none;">🔲 啟動全螢幕</button>
+        </div>
         
         <div class="global-config-panel">
             <div class="config-row">
@@ -226,8 +228,6 @@
         // ==========================================
         // 1. Local Storage 資料庫讀寫引擎
         // ==========================================
-        
-        // 頁面載入時，自動讀取記憶
         document.addEventListener('DOMContentLoaded', loadLocalData);
 
         function saveLocalData() {
@@ -265,10 +265,7 @@
         function clearLocalData() {
             if (confirm("⚠️ 警告：這將會刪除所有已儲存的發車名單及衝線記錄，無法復原！確定嗎？")) {
                 localStorage.removeItem('wtcIttDataV4');
-                finishData = [];
-                seqNum = 1;
-                startProfiles = {};
-                globalBibOrder = [];
+                finishData = []; seqNum = 1; startProfiles = {}; globalBibOrder = [];
                 document.getElementById('globalBibs').value = '';
                 updateDbStatus();
                 alert("🗑️ 記錄已全部清除！");
@@ -280,33 +277,57 @@
         }
 
         // ==========================================
-        // 2. 系統控制及防熄屏
+        // 2. 系統控制及防熄屏 (加入 iOS 智能全螢幕提示)
         // ==========================================
-
         async function requestWakeLock() {
             try {
-                if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                }
+                if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); }
             } catch (err) { console.log('WakeLock:', err.message); }
         }
 
-        // 當系統切換視窗再返黎時，重新鎖定螢幕
         document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible') {
-                await requestWakeLock();
-            }
+            if (wakeLock !== null && document.visibilityState === 'visible') { await requestWakeLock(); }
         });
 
+        // 【核心更新】智能全螢幕偵測及 iOS 教學
         function toggleFullScreen(e) {
-            e.preventDefault(); e.stopPropagation();
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    alert("⚠️ 您目前的手機瀏覽器不支援全螢幕 API。建議使用「加入主畫面」功能將其變成獨立 App！");
-                });
+            if(e) { e.preventDefault(); e.stopPropagation(); }
+            
+            let doc = window.document;
+            let docEl = doc.documentElement;
+
+            let requestFullScreen = docEl.requestFullscreen || docEl.webkitRequestFullScreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            let cancelFullScreen = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+
+            // 判斷是否 iOS 系統及是否已經係 PWA 獨立模式
+            let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            let isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+            if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+                // 如果唔係全螢幕
+                if (requestFullScreen && !isIOS) {
+                    // Android 或 電腦，直接執行全螢幕
+                    requestFullScreen.call(docEl).catch(err => {
+                        showIOSGuide();
+                    });
+                } else {
+                    // iPhone/iPad 系統
+                    if (isStandalone) {
+                        alert("✅ 您目前已經在獨立全螢幕模式中，無需再次切換！");
+                    } else {
+                        showIOSGuide();
+                    }
+                }
             } else {
-                if (document.exitFullscreen) document.exitFullscreen();
+                // 如果已經係全螢幕，就退出
+                if (cancelFullScreen) {
+                    cancelFullScreen.call(doc);
+                }
             }
+        }
+
+        function showIOSGuide() {
+            alert("🍎 iOS (iPhone/iPad) 用戶專屬設定：\n\n蘋果 iOS 不支援一鍵全螢幕。要獲得完美全螢幕體驗：\n\n1️⃣ 點擊 Safari 畫面底部的「分享」按鈕 (方格加向上箭嘴)\n2️⃣ 向下滑動，選擇「加入主畫面」(Add to Home Screen)\n3️⃣ 點擊右上角「加入」\n\n完成後，回到桌面點擊黑色的「WTC ITT」圖示，就會變成真正的全螢幕獨立 App！");
         }
 
         function goBack(e) {
@@ -326,13 +347,12 @@
             document.getElementById('mainApp').style.display = 'none';
             document.getElementById('setupScreen').style.display = 'flex';
             
-            saveLocalData(); // 返回主頁時再強制 Save 一次
+            saveLocalData(); 
         }
 
         // ==========================================
         // 3. 核心邏輯
         // ==========================================
-
         function startApp(mode) {
             const timeStr = document.getElementById('globalFirstTime').value;
             const intSec = parseInt(document.getElementById('globalInterval').value);
@@ -359,7 +379,7 @@
                 startProfiles[bib] = st.getTime();
             });
 
-            saveLocalData(); // 設定完立即儲存
+            saveLocalData(); 
             initApp(mode, baseTime);
         }
 
@@ -390,7 +410,6 @@
                 document.getElementById('mainDisplay').classList.add('finish-mode');
                 document.getElementById('subDisplay').classList.add('finish-mode');
                 
-                // 讀取並重新渲染舊記錄
                 renderRecordsList();
                 
                 document.getElementById('tapArea').addEventListener('pointerdown', handleFinishTap);
@@ -401,8 +420,7 @@
 
         function renderRecordsList() {
             const list = document.getElementById('recordsList');
-            list.innerHTML = ''; // 清空
-            // 倒序渲染，確保最新拍錶喺頂
+            list.innerHTML = ''; 
             [...finishData].reverse().forEach(row => {
                 const item = document.createElement('div');
                 item.className = 'record-item';
@@ -488,7 +506,7 @@
             let timeString = `${h}:${m}:${s}.${ms}`;
 
             finishData.push({ seq: seqNum, time: timeString, todMs: tapTime.getTime(), bib: '', netTimeStr: '' });
-            saveLocalData(); // 拍錶即 Save！
+            saveLocalData(); 
 
             const list = document.getElementById('recordsList');
             const item = document.createElement('div');
@@ -526,7 +544,7 @@
             } else {
                 netSpan.innerText = "無起步記錄"; netSpan.style.color = "var(--text-grey)"; record.netTimeStr = "NO_START_TIME";
             }
-            saveLocalData(); // 入完車牌即刻 Save 落底！
+            saveLocalData(); 
         }
 
         function formatNetTime(ms) {
