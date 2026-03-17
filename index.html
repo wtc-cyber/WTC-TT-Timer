@@ -142,6 +142,14 @@
         }
 
         .hidden { display: none !important; }
+
+/* 強制允許輸入與點擊，突破全螢幕或 iOS 的選取限制 */
+input, textarea {
+    user-select: auto !important;
+    -webkit-user-select: auto !important;
+    touch-action: auto !important;
+    pointer-events: auto !important;
+}
     </style>
 </head>
 <body>
@@ -205,7 +213,7 @@
     </div>
 
 
-    <script>
+   <script>
         // --- 變數宣告區 ---
         let currentMode = '';
         let audioCtx;
@@ -225,8 +233,40 @@
         let startProfiles = {};    
         let finishModeActive = false;
 
-        // --- 模組 1: Local Storage 資料庫讀寫 ---
-        document.addEventListener('DOMContentLoaded', loadLocalData);
+        // 【新增】記錄網絡時間與本地時間的誤差
+        let timeOffsetMs = 0;
+
+        // --- 模組 1: Local Storage 資料庫讀寫 與 網絡時間同步 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLocalData();
+            syncNetworkTime(); // 網頁載入時同步時間
+        });
+
+        // 【新增】同步網絡時間
+        async function syncNetworkTime() {
+            try {
+                const startFetch = Date.now();
+                // 使用 World Time API 獲取香港時間
+                const response = await fetch('http://worldtimeapi.org/api/timezone/Asia/Hong_Kong');
+                if (response.ok) {
+                    const data = await response.json();
+                    const networkTime = new Date(data.datetime).getTime();
+                    const endFetch = Date.now();
+                    const latency = (endFetch - startFetch) / 2; // 估算網絡來回延遲的一半
+                    // 計算時差
+                    timeOffsetMs = networkTime - (endFetch - latency);
+                    console.log("✅ 網絡時間同步成功，時差(毫秒):", timeOffsetMs);
+                }
+            } catch (error) {
+                console.warn("⚠️ 無法連線獲取網絡時間，將使用本機系統時間。", error);
+                timeOffsetMs = 0; // 斷網時使用系統時間
+            }
+        }
+
+        // 【新增】獲取經過校準的當前時間
+        function getNow() {
+            return new Date(Date.now() + timeOffsetMs);
+        }
 
         function saveLocalData() {
             const data = {
@@ -331,7 +371,7 @@
 
             if (!timeStr || isNaN(intSec) || intSec <= 0) { alert("請填妥起步時間和間距！"); return; }
 
-            let now = new Date();
+            let now = getNow(); // 【修改】使用校準後的時間
             let [h, m, s] = timeStr.split(':').map(Number);
             if(isNaN(s)) s = 0; 
             
@@ -340,32 +380,28 @@
                 baseTime.setDate(baseTime.getDate() + 1);
             }
 
-intervalMs = intSec * 1000;
+            intervalMs = intSec * 1000;
             const bibs = bibsStr.split(/[\s,]+/).filter(b => b.trim() !== '');
             globalBibOrder = bibs; 
             
             if (!startProfiles) startProfiles = {};
-            let currentTime = new Date().getTime();
-            let bibCounters = {}; // 追蹤每個號碼目前排到第幾次發車
+            let currentTime = getNow().getTime(); // 【修改】使用校準後的時間
+            let bibCounters = {}; 
 
             // 重新分配發車時間
             bibs.forEach((bib, index) => {
                 let st = new Date(baseTime.getTime() + index * intervalMs);
                 let stTime = st.getTime();
                 
-                // 確保這個號碼的記錄是個「陣列」(支援跑多趟)
                 if (!startProfiles[bib]) startProfiles[bib] = [];
-                // 兼容舊資料，如果舊資料只有一個時間數字，把它包成陣列
                 if (!Array.isArray(startProfiles[bib])) startProfiles[bib] = [startProfiles[bib]];
 
                 if (!bibCounters[bib]) bibCounters[bib] = 0;
                 let runIdx = bibCounters[bib];
 
-                // A. 如果是全新加的趟次，直接加進記錄
                 if (startProfiles[bib].length <= runIdx) {
                     startProfiles[bib].push(stTime);
                 } 
-                // B. 如果這趟的發車時間還沒到 (在未來)，允許更新時間
                 else if (startProfiles[bib][runIdx] > currentTime) {
                     startProfiles[bib][runIdx] = stTime;
                 }
@@ -394,7 +430,7 @@ intervalMs = intSec * 1000;
                 nextTargetTime = new Date(baseTime.getTime());
                 currentStartIdx = 0; configLocked = true; lastBeepSec = -1;
 
-                let now = new Date();
+                let now = getNow(); // 【修改】使用校準後的時間
                 while (nextTargetTime.getTime() <= now.getTime()) {
                     nextTargetTime.setTime(nextTargetTime.getTime() + intervalMs);
                     currentStartIdx++;
@@ -448,7 +484,7 @@ intervalMs = intSec * 1000;
 
         // --- 模組 5: UI 更新迴圈 ---
         function systemLoop() {
-            const now = new Date();
+            const now = getNow(); // 【修改】使用校準後的時間
             document.getElementById('systemClock').innerText = now.toLocaleTimeString('en-GB');
             if (currentMode === 'start' && configLocked && nextTargetTime) updateStartMode(now);
             else if (currentMode === 'finish') updateFinishMode(now);
@@ -513,7 +549,7 @@ intervalMs = intSec * 1000;
             if(!finishModeActive) return;
             e.preventDefault(); 
             
-            const tapTime = new Date();
+            const tapTime = getNow(); // 【修改】使用校準後的時間記錄衝線
             let h = String(tapTime.getHours()).padStart(2, '0'); let m = String(tapTime.getMinutes()).padStart(2, '0');
             let s = String(tapTime.getSeconds()).padStart(2, '0'); let ms = String(tapTime.getMilliseconds()).padStart(3, '0');
             let timeString = `${h}:${m}:${s}.${ms}`;
@@ -537,7 +573,7 @@ intervalMs = intSec * 1000;
             setTimeout(() => { document.getElementById('tapArea').style.backgroundColor = 'var(--bg-color)'; }, 100);
         }
 
-function updateRecord(seq, bibValue) {
+        function updateRecord(seq, bibValue) {
             const record = finishData.find(r => r.seq === seq);
             if (!record) return;
             const bib = bibValue.trim();
@@ -547,7 +583,6 @@ function updateRecord(seq, bibValue) {
             if (bib === "") {
                 netSpan.innerText = "--:--:--.---"; netSpan.style.color = "var(--text-grey)"; record.netTimeStr = ""; 
             } else if (startProfiles[bib]) {
-                // 找出該號碼【所有】小於或等於衝線時間的起步記錄 (過濾掉還沒發車的未來班次)
                 let validStarts = [];
                 if (Array.isArray(startProfiles[bib])) {
                     validStarts = startProfiles[bib].filter(t => t <= record.todMs);
@@ -556,14 +591,12 @@ function updateRecord(seq, bibValue) {
                 }
 
                 if (validStarts.length > 0) {
-                    // 如果他跑了多次，取最接近衝線前的那一次發車時間來計算
                     let bestStart = validStarts[validStarts.length - 1];
                     const netMs = record.todMs - bestStart;
                     
                     const formatted = formatNetTime(netMs);
                     netSpan.innerText = formatted; netSpan.style.color = "var(--btn-start-green)"; record.netTimeStr = formatted;
                 } else {
-                    // 記錄裡有他，但他的所有起步時間都在未來
                     netSpan.innerText = "尚未發車"; netSpan.style.color = "var(--status-red)"; record.netTimeStr = "ERROR";
                 }
             } else {
@@ -587,9 +620,9 @@ function updateRecord(seq, bibValue) {
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.setAttribute("href", url); link.setAttribute("download", `itt_result_${new Date().toISOString().slice(0,10)}.csv`);
+            link.setAttribute("href", url); link.setAttribute("download", `itt_result_${getNow().toISOString().slice(0,10)}.csv`);
             document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
         }
-    </script>
+</script>
 </body>
 </html>
