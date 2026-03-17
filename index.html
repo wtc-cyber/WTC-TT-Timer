@@ -242,24 +242,42 @@ input, textarea {
             syncNetworkTime(); // 網頁載入時同步時間
         });
 
-        // 【新增】同步網絡時間
+        // 【新增進階版】同步網絡時間：連續對準 5 次，取最準確（延遲最低）的一次
         async function syncNetworkTime() {
-            try {
-                const startFetch = Date.now();
-                // 使用 World Time API 獲取香港時間
-                const response = await fetch('http://worldtimeapi.org/api/timezone/Asia/Hong_Kong');
-                if (response.ok) {
-                    const data = await response.json();
-                    const networkTime = new Date(data.datetime).getTime();
-                    const endFetch = Date.now();
-                    const latency = (endFetch - startFetch) / 2; // 估算網絡來回延遲的一半
-                    // 計算時差
-                    timeOffsetMs = networkTime - (endFetch - latency);
-                    console.log("✅ 網絡時間同步成功，時差(毫秒):", timeOffsetMs);
+            console.log("⏳ 開始精確同步網絡時間...");
+            let bestOffset = 0;
+            let lowestLatency = Infinity;
+
+            // 嘗試同步 5 次
+            for (let i = 0; i < 5; i++) {
+                try {
+                    const startFetch = Date.now();
+                    // 加上 ?nocache 防止瀏覽器快取 (Cache) 舊時間
+                    const response = await fetch('http://worldtimeapi.org/api/timezone/Asia/Hong_Kong?nocache=' + startFetch);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const networkTime = new Date(data.datetime).getTime();
+                        const endFetch = Date.now();
+                        const latency = (endFetch - startFetch) / 2;
+                        
+                        // 只保留來回速度最快（延遲最低）的那一次計算結果
+                        if (latency < lowestLatency) {
+                            lowestLatency = latency;
+                            bestOffset = networkTime - (endFetch - latency);
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`⚠️ 第 ${i+1} 次連線失敗`);
                 }
-            } catch (error) {
-                console.warn("⚠️ 無法連線獲取網絡時間，將使用本機系統時間。", error);
-                timeOffsetMs = 0; // 斷網時使用系統時間
+            }
+
+            if (lowestLatency !== Infinity) {
+                timeOffsetMs = bestOffset;
+                console.log(`✅ 精準對時完成！最低單程延遲: ${lowestLatency}ms, 最終調整時差: ${timeOffsetMs}ms`);
+            } else {
+                console.warn("❌ 完全無法獲取網絡時間，將使用本機系統時間。");
+                timeOffsetMs = 0;
             }
         }
 
