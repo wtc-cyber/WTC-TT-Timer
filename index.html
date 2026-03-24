@@ -531,29 +531,34 @@ input, textarea {
             let secLeft = Math.ceil(diffMs / 1000);
             document.getElementById('mainDisplay').innerText = secLeft;
 
-            let listHTML = "";
-            let showNum = 5; 
-            for (let i = 0; i < showNum; i++) {
-                let idx = currentStartIdx + i;
-                if (idx < globalBibOrder.length || globalBibOrder.length === 0) {
-                    let riderTime = new Date(nextTargetTime.getTime() + (i * intervalMs));
-                    let timeStr = riderTime.toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-                    let riderName = getNextRiderDisplay(idx);
-                    
-                    if (i === 0) {
-                        listHTML += `<div style="color: #00ff00; font-weight: bold; font-size: 1.2em; margin-bottom: 5px;">NEXT: ${timeStr} - ${riderName}</div>`;
-                    } else {
-                        listHTML += `<div style="color: #bbb; font-size: 0.9em;">${timeStr} - ${riderName}</div>`;
-                    }
-                }
-            }
-            document.getElementById('riderInfo').innerHTML = listHTML || "名單已結束";
+let listHTML = `<div style="display: flex; align-items: baseline; gap: 20px; white-space: nowrap; overflow-x: auto; padding: 5px 0;">`;
+let showNum = 5; 
 
+for (let i = 0; i < showNum; i++) {
+    let idx = currentStartIdx + i;
+    if (idx < globalBibOrder.length || globalBibOrder.length === 0) {
+        let riderTime = new Date(nextTargetTime.getTime() + (i * intervalMs));
+        let timeStr = riderTime.toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        let riderName = getNextRiderDisplay(idx);
+        
+        if (i === 0) {
+            // 第一位：綠色、較大
+            listHTML += `<span style="color: #00ff00; font-weight: bold; font-size: 2em;">NEXT: ${timeStr} - ${riderName}</span>`;
+        } else {
+            // 其餘四位：灰色、較細，前面加個分隔符號
+            listHTML += `<span style="color: #bbb; font-size: 1.5em;"><span style="color: #555; margin: 0 10px;">|</span>${timeStr} - ${riderName}</span>`;
+        }
+    }
+}
+listHTML += `</div>`;
+
+document.getElementById('riderInfo').innerHTML = listHTML || "名單已結束";
             if (secLeft !== lastBeepSec) {
                 if (secLeft === 30 || secLeft === 10 || (secLeft <= 5 && secLeft > 0)) playBeep(490, 'square', 400); 
                 lastBeepSec = secLeft;
             }
-            document.getElementById('mainDisplay').style.color = secLeft <= 10 ? 'var(--status-red)' : 'var(--text-color)';
+            // 🎨 控制最後 10 秒字體轉黃色 (#FFD700 係一種好搶眼嘅金黃色)
+document.getElementById('mainDisplay').style.color = secLeft <= 10 ? '#FFD700' : 'var(--text-color)';
         }
 
         function updateFinishMode(now) {
